@@ -436,7 +436,7 @@ impl PolicyEngine {
                 // the SAME set enforcement resolves (`db::find_secret_hosts`), so a
                 // policy rule on the secret can never fall short of injection (the
                 // OpenAI multi-host bypass class).
-                secret_inject::secret_host_patterns(&s.type_, &s.host_pattern)
+                secret_inject::secret_host_patterns(&s.type_, &s.host_pattern, s.metadata.as_ref())
                     .iter()
                     .any(|p| host_matches(hostname, p))
             })
@@ -1183,7 +1183,7 @@ impl PolicyEngine {
         match db::find_secrets_by_workspace(&self.pool, &agent.workspace_id).await {
             Ok(secrets) => {
                 if secrets.iter().any(|s| {
-                    secret_inject::secret_host_patterns(&s.type_, &s.host_pattern)
+                    secret_inject::secret_host_patterns(&s.type_, &s.host_pattern, s.metadata.as_ref())
                         .iter()
                         .any(|p| host_matches(hostname, p))
                 }) {
@@ -1199,7 +1199,7 @@ impl PolicyEngine {
         match db::find_secrets_by_org(&self.pool, &agent.organization_id).await {
             Ok(secrets) => {
                 if secrets.iter().any(|s| {
-                    secret_inject::secret_host_patterns(&s.type_, &s.host_pattern)
+                    secret_inject::secret_host_patterns(&s.type_, &s.host_pattern, s.metadata.as_ref())
                         .iter()
                         .any(|p| host_matches(hostname, p))
                 }) {

@@ -169,18 +169,27 @@ pub(crate) fn build_injections(
 /// (`api.openai.com`, ChatGPT, and their subdomains) regardless of which host it
 /// was stored under. Returned as `host_matches` patterns, so `*.openai.com` covers
 /// every `.openai.com` subdomain.
-#[must_use]
-pub(crate) fn secret_host_patterns(secret_type: &str, host_pattern: &str) -> Vec<String> {
+pub(crate) fn secret_host_patterns(
+    secret_type: &str,
+    host_pattern: &str,
+    metadata: Option<&serde_json::Value>,
+) -> Vec<String> {
     let mut patterns = vec![host_pattern.to_string()];
     if secret_type == "openai" {
-        for extra in [
-            "api.openai.com",
-            "chatgpt.com",
-            "*.chatgpt.com",
-            "*.openai.com",
-        ] {
-            if !patterns.iter().any(|p| p == extra) {
-                patterns.push(extra.to_string());
+        let is_oauth = metadata
+            .and_then(|m| m.get("authMode"))
+            .and_then(|v| v.as_str())
+            == Some("oauth");
+        if is_oauth {
+            for extra in [
+                "api.openai.com",
+                "chatgpt.com",
+                "*.chatgpt.com",
+                "*.openai.com",
+            ] {
+                if !patterns.iter().any(|p| p == extra) {
+                    patterns.push(extra.to_string());
+                }
             }
         }
     }
@@ -566,8 +575,9 @@ mod tests {
     fn secret_host_patterns_openai_covers_all_its_hosts() {
         // One OpenAI credential is valid across api.openai.com, ChatGPT, and the
         // subdomains — enforcement must resolve the same set injection does.
+        let oauth_metadata = serde_json::json!({ "authMode": "oauth" });
         assert_eq!(
-            secret_host_patterns("openai", "api.openai.com"),
+            secret_host_patterns("openai", "api.openai.com", Some(&oauth_metadata)),
             vec![
                 "api.openai.com".to_string(),
                 "chatgpt.com".to_string(),
@@ -575,13 +585,25 @@ mod tests {
                 "*.openai.com".to_string(),
             ]
         );
+
+        let apikey_metadata = serde_json::json!({ "authMode": "api-key" });
+        assert_eq!(
+            secret_host_patterns("openai", "api.openai.com", Some(&apikey_metadata)),
+            vec!["api.openai.com".to_string()]
+        );
+
+        assert_eq!(
+            secret_host_patterns("openai", "api.openai.com", None),
+            vec!["api.openai.com".to_string()]
+        );
     }
 
     #[test]
     fn secret_host_patterns_openai_dedups_the_stored_host() {
         // Stored under chatgpt.com (Codex/OAuth mode): same set, no duplicate.
+        let oauth_metadata = serde_json::json!({ "authMode": "oauth" });
         assert_eq!(
-            secret_host_patterns("openai", "chatgpt.com"),
+            secret_host_patterns("openai", "chatgpt.com", Some(&oauth_metadata)),
             vec![
                 "chatgpt.com".to_string(),
                 "api.openai.com".to_string(),
@@ -595,11 +617,11 @@ mod tests {
     fn secret_host_patterns_other_types_are_just_their_host() {
         // No expansion for symmetric types — enforcement already == injection.
         assert_eq!(
-            secret_host_patterns("anthropic", "api.anthropic.com"),
+            secret_host_patterns("anthropic", "api.anthropic.com", None),
             vec!["api.anthropic.com".to_string()]
         );
         assert_eq!(
-            secret_host_patterns("generic", "internal.example.com"),
+            secret_host_patterns("generic", "internal.example.com", None),
             vec!["internal.example.com".to_string()]
         );
     }
