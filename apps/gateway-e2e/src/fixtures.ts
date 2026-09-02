@@ -1,4 +1,4 @@
-import { cryptoService } from "@onecli/api/ee/kms-crypto";
+import { cryptoService } from "@onecli/api/lib/crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 import type { TestIds } from "./ids.js";
@@ -41,7 +41,8 @@ export interface InjectionSpec {
 export interface SecretSpec extends InjectionSpec {
   /** Host the credential is scoped to, e.g. `127.0.0.1`. */
   readonly hostPattern: string;
-  /** Plaintext. Stored as a REAL KMS envelope via the production crypto. */
+  /** Plaintext. Stored via the production local-AES encryptor (the enterprise
+   * self-host backend); the spawned gateway decrypts it with the same key. */
   readonly value: string;
   /**
    * Omitted means `"*"` — every path. `/a/*` is boundary-aware (matches `/a`
@@ -87,6 +88,10 @@ export interface RuleTargetSpec {
   /** `kind: "connection"` — index into `WorldSpec.appConnections`; the rule
    * binds to that specific connection (per-connection decisions). */
   readonly connectionIndex?: number;
+  /** `kind: "connection" | "app"` - catalog tool ids narrowing the target to
+   * those tools' endpoint fan-out (the production grant stacks' shape). Empty
+   * or omitted = the whole app. */
+  readonly tools?: ReadonlyArray<string>;
 }
 
 /** A `body contains` condition. The matcher lowercases both sides. */
@@ -151,10 +156,10 @@ export interface RuleSpec {
 /**
  * A connected OAuth app.
  *
- * The credentials are a real KMS envelope but are never decrypted by the tests
- * that use this: they assert on resolution outcomes (ambiguity, not-found)
- * which are decided by grouping connections on `provider` and `id`, before any
- * credential is touched.
+ * The credentials are a real AES ciphertext but are never decrypted by the
+ * tests that use this: they assert on resolution outcomes (ambiguity,
+ * not-found) which are decided by grouping connections on `provider` and
+ * `id`, before any credential is touched.
  */
 export interface AppConnectionSpec {
   readonly provider: string;
@@ -233,14 +238,21 @@ const targetRow = (
   }
   if (kind === "connection") {
     // The CHECK rejects path/method narrowing columns on a connection row;
-    // narrowing is the `appTools` axis, which no scenario drives yet.
+    // narrowing is the `appTools` axis (`tools` - the grant stacks' shape).
     const connectionId = connectionIds[target.connectionIndex ?? -1];
     if (connectionId === undefined) {
       throw new Error(
         `${id}: connectionIndex ${String(target.connectionIndex)} does not name a seeded connection (${String(connectionIds.length)} seeded)`,
       );
     }
-    return { id, kind, appConnection: { connect: { id: connectionId } } };
+    return {
+      id,
+      kind,
+      appConnection: { connect: { id: connectionId } },
+      ...(target.tools !== undefined && target.tools.length > 0
+        ? { appTools: [...target.tools] }
+        : {}),
+    };
   }
   if (kind === "app") {
     if (target.provider === undefined) {
@@ -252,6 +264,9 @@ const targetRow = (
       kind,
       appProvider: target.provider,
       appConnectionScope: target.connectionScope ?? null,
+      ...(target.tools !== undefined && target.tools.length > 0
+        ? { appTools: [...target.tools] }
+        : {}),
     };
   }
   if (target.hostPattern === undefined) {
@@ -407,9 +422,9 @@ export const addSecret = async (
       workspaceId: scope === "workspace" ? ids.workspace : null,
       organizationId: ids.org,
       valueSource: "inline",
-      // The production encryptor, against the same KMS the gateway decrypts
-      // with. This is what makes the TS→Rust envelope contract a real
-      // assertion rather than Rust agreeing with itself.
+      // The production encryptor, against the same AES key the gateway
+      // decrypts with. This is what makes the TS→Rust 3-part format contract
+      // a real assertion rather than Rust agreeing with itself.
       encryptedValue: await cryptoService.encrypt(secret.value),
       hostPattern: secret.hostPattern,
       pathPattern: secret.pathPattern ?? null,

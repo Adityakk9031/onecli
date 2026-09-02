@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   agentAppDescription,
+  agentAppDescriptionWithOwner,
   BOT_SCOPES,
+  botScopesFor,
   buildAgentManifest,
   tombstoneAppName,
   withAppName,
@@ -43,6 +45,18 @@ describe("BOT_SCOPES", () => {
   });
 });
 
+describe("botScopesFor", () => {
+  it("regular = exactly BOT_SCOPES; agent = BOT_SCOPES + assistant:write", () => {
+    // `assistant:write` is what Slack requires to declare `agent_view`. The
+    // regular arm exists for PRE-EXISTING apps only: a pending regular
+    // attach resumed after the agent-only switch must mint a consent URL
+    // granting exactly the scopes its remote manifest declared — asking for
+    // `assistant:write` there would confuse admins reviewing the grant.
+    expect(botScopesFor("regular")).toEqual([...BOT_SCOPES]);
+    expect(botScopesFor("agent")).toEqual([...BOT_SCOPES, "assistant:write"]);
+  });
+});
+
 describe("the app_home messages tab", () => {
   it("is enabled and writable in every generated manifest — without it Slack disables the DM composer entirely", () => {
     // Caught live on the first real DM: scopes and `message.im` alone do NOT
@@ -62,16 +76,49 @@ describe("the app_home messages tab", () => {
 });
 
 describe("buildAgentManifest", () => {
-  it("bakes the FULL scope list into oauth_config — the manifest is a grant surface", () => {
+  it("bakes the FULL agent scope list into oauth_config — the manifest is a grant surface", () => {
     // The other grant surface is the provider's rebuilt authorize URL; the
-    // pg suite pins that one to BOT_SCOPES.join(","). Both must carry the
-    // whole list or the installed bot is missing capabilities.
+    // pg suite pins that one to botScopesFor(appMode).join(","). Both must
+    // carry the whole list or the installed bot is missing capabilities.
     const manifest = buildAgentManifest({
       agentName: "Deploy Agent",
       transport: "socket",
       publicApiUrl: null,
     }) as { oauth_config: { scopes: { bot: string[] } } };
-    expect(manifest.oauth_config.scopes.bot).toEqual([...BOT_SCOPES]);
+    expect(manifest.oauth_config.scopes.bot).toEqual([
+      ...BOT_SCOPES,
+      "assistant:write",
+    ]);
+  });
+
+  it("always declares agent_view with a description and asks for assistant:write", () => {
+    // `agent_view` without `agent_description` fails manifest validation;
+    // `agent_view` without `assistant:write` does too. The pair is what
+    // makes the app a Slack agent (the sessions loader UX) — IRREVERSIBLE
+    // per app, and since the agent-only switch, baked into every new app.
+    const manifest = buildAgentManifest({
+      agentName: "Deploy Agent",
+      transport: "socket",
+      publicApiUrl: null,
+    }) as {
+      features: { agent_view?: { agent_description: string } };
+      oauth_config: { scopes: { bot: string[] } };
+    };
+    expect(manifest.features.agent_view).toEqual({
+      agent_description: "Deploy Agent, a OneCLI hosted agent",
+    });
+    expect(manifest.oauth_config.scopes.bot).toContain("assistant:write");
+  });
+
+  it("keeps agent_description inside Slack's 300-char cap for a max-length name", () => {
+    const manifest = buildAgentManifest({
+      agentName: "A".repeat(80),
+      transport: "socket",
+      publicApiUrl: null,
+    }) as { features: { agent_view: { agent_description: string } } };
+    expect(
+      manifest.features.agent_view.agent_description.length,
+    ).toBeLessThanOrEqual(300);
   });
 
   it("keeps the display fields inside Slack's documented caps (name 35, description 140)", () => {
@@ -195,5 +242,55 @@ describe("withSyncedAppName", () => {
     expect(out.display_information.description).toContain(
       "a OneCLI hosted agent",
     );
+  });
+
+  it("carries the Managed-by owner suffix through a rename", () => {
+    const manifest = exported({
+      display_information: {
+        name: "old-name",
+        description: agentAppDescriptionWithOwner("old-name", {
+          name: "Jonathan",
+          email: "jonathan@onecli.sh",
+        }),
+      },
+    });
+    const out = withSyncedAppName(manifest, "New Name") as {
+      display_information: { description: string };
+    };
+    expect(out.display_information.description).toBe(
+      "New Name, a OneCLI hosted agent. Managed by Jonathan (jonathan@onecli.sh).",
+    );
+  });
+});
+
+describe("agentAppDescriptionWithOwner", () => {
+  it("names the owner with their email", () => {
+    expect(
+      agentAppDescriptionWithOwner("Donna", {
+        name: "Jonathan",
+        email: "jonathan@onecli.sh",
+      }),
+    ).toBe(
+      "Donna, a OneCLI hosted agent. Managed by Jonathan (jonathan@onecli.sh).",
+    );
+  });
+
+  it("falls back to the bare email when the owner has no display name", () => {
+    expect(
+      agentAppDescriptionWithOwner("Donna", {
+        name: null,
+        email: "jonathan@onecli.sh",
+      }),
+    ).toBe("Donna, a OneCLI hosted agent. Managed by jonathan@onecli.sh.");
+  });
+
+  it("sacrifices the owner suffix, never the identity line, at the 140 cap", () => {
+    const long = agentAppDescriptionWithOwner("N".repeat(34), {
+      name: "A very long name that overflows the app description budget",
+      email: "very-long-address@example-company-domain.com",
+    });
+    expect(long.length).toBeLessThanOrEqual(140);
+    expect(long).toContain("a OneCLI hosted agent");
+    expect(long).not.toContain("Managed by");
   });
 });

@@ -194,6 +194,21 @@ describe("the swarm prompt override", () => {
     );
     expect(flat).toContain("prefer ending your turn over waiting");
   });
+
+  it("states the deliverable-extraction laws", () => {
+    // Observed live: a lead looped for minutes unable to pull four ~2.4k-char
+    // deliverables out of completed helpers — every tool relay truncated the
+    // text, and messages to the completed helpers were dropped after
+    // reporting success. Each pin below is one leg of the way out; drop any
+    // leg and leads re-enter the retry loop.
+    const flat = SWARM_PROMPT_OVERRIDE.replace(/\s+/g, " ");
+    expect(flat).toContain("name an exact file path");
+    expect(flat).toContain("full text, never a summary");
+    expect(flat).toContain("Collect helpers ONE at a time");
+    expect(flat).toContain("Never message a helper that has already completed");
+    expect(flat).toContain("verified in hand");
+    expect(flat).toContain("a stopped helper is gone for good");
+  });
 });
 
 describe("the wake honesty line", () => {
@@ -242,6 +257,35 @@ describe("the turn-ending contract", () => {
     expect(flat).toContain(
       'A promise to "report back" is only real after you arm the watch',
     );
+  });
+});
+
+// The response-style contract (user decision, 2026-08-30): live agents were
+// answering with multi-screen process narration nobody could read in chat.
+// The weak "be concise" line demonstrably did not land, so the directive now
+// SPECIFIES the behavior — outcome first, a few short lines, no narration,
+// detail behind demand. These pins keep the legs that made the difference;
+// the operator's brief still wins on conflict (the identity section's law).
+describe("the response-style contract", () => {
+  it("leads with the outcome", () => {
+    const flat = PLATFORM_SYSTEM_PROMPT.replace(/\s+/g, " ");
+    expect(flat).toContain(
+      "lead with the outcome in the first one or two sentences",
+    );
+  });
+
+  it("bans process narration and internal checklists", () => {
+    const flat = PLATFORM_SYSTEM_PROMPT.replace(/\s+/g, " ");
+    expect(flat).toContain("Do not narrate your process");
+    expect(flat).toContain(
+      "never include your internal checklists or step-by-step commentary",
+    );
+  });
+
+  it("puts detail behind demand instead of inline", () => {
+    const flat = PLATFORM_SYSTEM_PROMPT.replace(/\s+/g, " ");
+    expect(flat).toContain("Detail belongs behind demand");
+    expect(flat).toContain("expand only when asked");
   });
 });
 

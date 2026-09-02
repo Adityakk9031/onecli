@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MAX_ATTACHMENTS_PER_MESSAGE } from "@onecli/agent-protocol";
+import { CHANNEL_PROVIDER_IDS } from "../services/channels/types";
 
 /**
  * Conversations and turns (plans/hosted-agents-v2.md step 4). Constants live
@@ -9,10 +10,17 @@ import { MAX_ATTACHMENTS_PER_MESSAGE } from "@onecli/agent-protocol";
 
 /**
  * Where a conversation comes from. `web` is a person in the dashboard; the
- * rest arrive with their own steps (Slack §3.16, crons step 7, watches step
- * 10) and exist now only so those land without a migration.
+ * rest arrive with their own steps (channels §3.16, crons step 7, watches
+ * step 10). Channel ingestion stamps `source: presence.provider`, so the
+ * provider ids ARE sources — composed from the one provider list, a new
+ * provider cannot forget this union.
  */
-export const CONVERSATION_SOURCES = ["web", "slack", "cron", "watch"] as const;
+export const CONVERSATION_SOURCES = [
+  "web",
+  ...CHANNEL_PROVIDER_IDS,
+  "cron",
+  "watch",
+] as const;
 export type ConversationSource = (typeof CONVERSATION_SOURCES)[number];
 
 /** The non-human sources: a turn born from an automation, not a person
@@ -106,6 +114,7 @@ export const LIFECYCLE_TURN_ERROR_CODES = [
 export const TURN_ERROR_CODES = [
   "no_model_key",
   "model_provider_error",
+  "trial_credit_exhausted",
   ...LIFECYCLE_TURN_ERROR_CODES,
 ] as const;
 export type TurnErrorCode = (typeof TURN_ERROR_CODES)[number];
@@ -187,6 +196,16 @@ export const IMAGE_UNAVAILABLE_MESSAGE =
 export const MODEL_PROVIDER_ERROR_MESSAGE =
   "The agent's model provider rejected the request. This is usually a usage limit or an expired key. Check the connected model key, or connect a different one, then send your message again.";
 
+/** The platform's free trial credit ran out mid-conversation — the agent was
+ * running on OneCLI's own key (no key of the user's connected), and the
+ * gateway paused it at the cap. The fix is the same family as
+ * `no_model_key`: connect a key, one link away — so the copy points there
+ * and the surfaces reuse the add-key door. Raw gateway 403 bodies never
+ * render on a chat surface; this canonical copy replaces them (the raw text
+ * stays operator material, like `model_provider_error`). */
+export const TRIAL_CREDIT_EXHAUSTED_MESSAGE =
+  "This agent was running on OneCLI's free trial credit, which is now used up. Connect your own model key, then send your message again.";
+
 /** The harness refused the message because its session was still executing
  * earlier, platform-abandoned work and the adapter's self-heal (cancel +
  * resend with backoff) could not free it. Genuinely temporary: the blocked
@@ -235,6 +254,10 @@ export const TURN_FAILURE_COPY: Partial<
   model_provider_error: {
     code: "model_provider_error",
     message: MODEL_PROVIDER_ERROR_MESSAGE,
+  },
+  trial_credit_exhausted: {
+    code: "trial_credit_exhausted",
+    message: TRIAL_CREDIT_EXHAUSTED_MESSAGE,
   },
   harness_busy: {
     code: "harness_busy",

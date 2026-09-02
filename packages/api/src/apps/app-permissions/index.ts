@@ -11,6 +11,7 @@ export type {
 export {
   mapRuleActionToPermission,
   allGroupTools,
+  hostPatternsOf,
   toAppPermissionDefinitionSummary,
 } from "./types";
 
@@ -69,6 +70,7 @@ import { fathomPermissions } from "./fathom";
 import { slackPermissions } from "./slack";
 import { firefliesPermissions } from "./fireflies";
 import { zohoCrmPermissions } from "./zoho-crm";
+import { snowflakePermissions } from "./snowflake";
 
 const permissionRegistry = new Map<string, AppPermissionDefinition>();
 
@@ -141,3 +143,4 @@ register(fathomPermissions);
 register(slackPermissions);
 register(firefliesPermissions);
 register(zohoCrmPermissions);
+register(snowflakePermissions);

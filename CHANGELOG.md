@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.4.0](https://github.com/onecli/onecli/compare/v2.3.1...v2.4.0) (2026-09-01)
+
+
+### Features
+
+* live Slack task cards, web live activity loader, answer extraction fix ([#540](https://github.com/onecli/onecli/issues/540)) ([59df414](https://github.com/onecli/onecli/commit/59df414bfba5cea674f6396a01aae4d287b439f7))
+
+
+### Bug Fixes
+
+* fail-closed policy hardening, cargo-workspace gateway, agent-flavored Slack apps ([#538](https://github.com/onecli/onecli/issues/538)) ([f5ee386](https://github.com/onecli/onecli/commit/f5ee38657c2d6cff07bc19e84f9abf40b3b5af1f))
+
+## [2.3.1](https://github.com/onecli/onecli/compare/v2.3.0...v2.3.1) (2026-08-29)
+
+
+### Bug Fixes
+
+* **gateway:** limit openai host expansion to oauth secrets only ([#525](https://github.com/onecli/onecli/issues/525)) ([4d9a4e1](https://github.com/onecli/onecli/commit/4d9a4e1e01ba98a02c080b76e4a2e1197f23cd87))
+* nonce-based CSP, enterprise-default E2E suites, chat-first onboarding ([#531](https://github.com/onecli/onecli/issues/531)) ([e1b1555](https://github.com/onecli/onecli/commit/e1b1555dedef469ec089104a56ad3cde3db1236f))
+
+## [2.3.0](https://github.com/onecli/onecli/compare/v2.2.3...v2.3.0) (2026-08-28)
+
+
+### Features
+
+* shared Slack app - team onboarding from Slack ([#523](https://github.com/onecli/onecli/issues/523)) ([8d4381c](https://github.com/onecli/onecli/commit/8d4381c2a40e0b662976313644caccc678dc83e0))
+* Snowflake integration, platform Anthropic trial credit, Slack CDN redirect fix ([#528](https://github.com/onecli/onecli/issues/528)) ([4b94687](https://github.com/onecli/onecli/commit/4b94687e1727b2d74228d0e111045fe98c479505))
+
 ## [2.2.3](https://github.com/onecli/onecli/compare/v2.2.2...v2.2.3) (2026-08-26)
 
 

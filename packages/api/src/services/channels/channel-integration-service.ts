@@ -102,7 +102,7 @@ export const connectIntegration = async (
     if (existing._count.agentChannels > 0) {
       throw new ServiceError(
         "CONFLICT",
-        "This token belongs to a different Slack workspace than the agents already attached here. Detach them first, or paste a token for the connected workspace.",
+        `This token belongs to a different ${channelProvider(provider).displayName} workspace than the agents already attached here. Detach them first, or paste a token for the connected workspace.`,
       );
     }
     // Under the rotate lock: a paste replacing a pair mid-rotation must
@@ -169,7 +169,9 @@ export const disconnectIntegration = async (
     where: { organizationId_provider: { organizationId, provider } },
     select: {
       id: true,
-      _count: { select: { agentChannels: true, userLinks: true } },
+      _count: {
+        select: { agentChannels: true, userLinks: true, installations: true },
+      },
     },
   });
   if (!existing) throw new ServiceError("NOT_FOUND", "Integration not found");
@@ -178,7 +180,14 @@ export const disconnectIntegration = async (
   // in-flight rotation's count-0 reconcile would otherwise read the unlocked
   // clear as "a stale refusal wiped my pair" and write the freshly rotated,
   // fully LIVE credential back — silently undoing the revocation.
-  if (existing._count.agentChannels === 0 && existing._count.userLinks === 0) {
+  if (
+    existing._count.agentChannels === 0 &&
+    existing._count.userLinks === 0 &&
+    // A live shared-app install rides this row too — deleting it would
+    // cascade the installation away as a side effect of dropping a mere
+    // automation credential.
+    existing._count.installations === 0
+  ) {
     await withIntegrationRotateLock(existing.id, (tx) =>
       tx.channelIntegration.delete({ where: { id: existing.id } }),
     );
@@ -377,6 +386,18 @@ export const withFreshIntegrationCredentials = async <T>(
   provider: ChannelProviderId,
   fn: (accessToken: string, integrationId: string) => Promise<T>,
 ): Promise<T> => {
+  // FAST PATH (managed-apps arm): the provider's shared workspace install
+  // may carry a credential that can mint agent apps — the same manifest API
+  // the automation credential drives, minus the paste and the rotation.
+  // The facet answers null (no shared app, no install, no usable token, or
+  // a recorded may-not-mint refusal) to send us to the credential path; a
+  // real `fn` error propagates — it must never run twice.
+  const sharedApp = channelProvider(provider).sharedApp;
+  if (sharedApp?.configured()) {
+    const minted = await sharedApp.tryMintWith({ organizationId, fn });
+    if (minted) return minted.result;
+  }
+
   const row = await db.channelIntegration.findUnique({
     where: { organizationId_provider: { organizationId, provider } },
     select: { id: true, credentials: true },
@@ -384,7 +405,7 @@ export const withFreshIntegrationCredentials = async <T>(
   if (!row?.credentials) {
     throw new ServiceError(
       "UNPROCESSABLE",
-      "The organization has no Slack automation token. Connect one in the org's Channels settings, or use the manifest flow instead.",
+      `The organization has no ${channelProvider(provider).displayName} automation token. Connect one in the org's Channels settings, or use the manifest flow instead.`,
     );
   }
 
@@ -395,19 +416,19 @@ export const withFreshIntegrationCredentials = async <T>(
   if (result.outcome === "gone") {
     throw new ServiceError(
       "UNPROCESSABLE",
-      "The organization has no Slack automation token. Connect one in the org's Channels settings, or use the manifest flow instead.",
+      `The organization has no ${channelProvider(provider).displayName} automation token. Connect one in the org's Channels settings, or use the manifest flow instead.`,
     );
   }
   if (result.outcome === "cleared") {
     if (result.reason === "foreign_tenant") {
       throw new ServiceError(
         "CONFLICT",
-        "The stored Slack automation token belongs to a different workspace than the one connected to this organization. Paste a token for the connected workspace in the org's Channels settings.",
+        `The stored ${channelProvider(provider).displayName} automation token belongs to a different workspace than the one connected to this organization. Paste a token for the connected workspace in the org's Channels settings.`,
       );
     }
     throw new ServiceError(
       "UNPROCESSABLE",
-      "The stored Slack automation token has expired and could not be refreshed. Paste a fresh one in the org's Channels settings.",
+      `The stored ${channelProvider(provider).displayName} automation token has expired and could not be refreshed. Paste a fresh one in the org's Channels settings.`,
     );
   }
 
@@ -564,7 +585,7 @@ export const addUserLink = async (
     ) {
       throw new ServiceError(
         "CONFLICT",
-        "That member or Slack account is already linked.",
+        `That member or ${channelProvider(provider).displayName} account is already linked.`,
       );
     }
     throw err;

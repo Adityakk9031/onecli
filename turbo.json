@@ -66,6 +66,8 @@
     "LOG_LEVEL",
     "LOG_FORMAT",
     "MAX_ORGS_PER_USER",
+    "PLATFORM_ANTHROPIC_API_KEY",
+    "PLATFORM_ANTHROPIC_CREDIT_CENTS",
     "MAILERCHECK_API_KEY",
     "DISCORD_WEBHOOK_URL",
     "DISCORD_REVIEW_WEBHOOK_URL",
@@ -177,6 +179,12 @@
     "SSH_SESSION_LEASE_SECONDS",
     "CONTROL_PLANE_URL",
     "SLACK_API_BASE_URL",
+    "SLACK_CDN_BASE_URL",
+    "SLACK_SHARED_CLIENT_ID",
+    "SLACK_SHARED_CLIENT_SECRET",
+    "SLACK_SHARED_SIGNING_SECRET",
+    "SLACK_SHARED_APP_ID",
+    "SLACK_SHARED_APP_MANAGER_APPROVED",
     "ANTHROPIC_API_BASE_URL",
     "OPENAI_API_BASE_URL",
     "CI"
@@ -188,7 +196,7 @@
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "@onecli/gateway#build": {
-      "inputs": ["src/**", "Cargo.toml", "Cargo.lock"],
+      "inputs": ["crates/**", "Cargo.toml", "Cargo.lock"],
       "outputs": ["target/release/**"]
     },
     "@onecli/ssh-terminator#dev": {
@@ -241,14 +249,14 @@
       ]
     },
     "@onecli/gateway#check": {
-      "inputs": ["src/**", "Cargo.toml"]
+      "inputs": ["crates/**", "Cargo.toml"]
     },
     "@onecli/gateway#check-types": {
-      "inputs": ["src/**", "Cargo.toml", "Cargo.lock"],
+      "inputs": ["crates/**", "Cargo.toml", "Cargo.lock"],
       "outputs": []
     },
     "@onecli/gateway#lint": {
-      "inputs": ["src/**", "Cargo.toml"],
+      "inputs": ["crates/**", "Cargo.toml"],
       "outputs": []
     },
     "lint": {
@@ -266,7 +274,7 @@
       "env": ["ONECLI_TEST_HERMETIC"]
     },
     "@onecli/gateway#test": {
-      "inputs": ["src/**", "tests/**", "Cargo.toml", "Cargo.lock"]
+      "inputs": ["crates/**", "Cargo.toml", "Cargo.lock"]
     },
     "dev": {
       "cache": false,

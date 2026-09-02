@@ -1,4 +1,4 @@
-import type { ChannelTransport } from "../../types";
+import type { ChannelAppMode, ChannelTransport } from "../../types";
 
 /**
  * The generated Slack app manifest for one agent's presence — the single
@@ -7,9 +7,14 @@ import type { ChannelTransport } from "../../types";
  * hand. Transport-aware: `socket` enables Socket Mode; `events` bakes our
  * inbound request URLs and the OAuth redirect.
  *
- * Deliberately a PLAIN BOT — no assistant/`agent_view` features: enabling
- * them is one-way, parts are plan-gated on Slack's side, and `message.im`
- * needs none of it. Revisit post-v2 (recorded non-goal).
+ * Always agent-flavored: every NEW app declares `features.agent_view` (the
+ * native Slack agent UX — the sessions "Working…" loader in threads) plus the
+ * `assistant:write` scope it requires. Declaring `agent_view` is ONE-WAY per
+ * app (Slack refuses to revert it) and parts of the runtime are plan-gated on
+ * Slack's side (`feature_disabled` on free workspaces) — the receipt layer
+ * falls back to the emoji reaction there. Pre-existing apps built as plain
+ * bots keep working: their presence rows stamp `appMode: "regular"` and the
+ * runtime honors the stamp — only creation is agent-only.
  */
 
 /** Slack caps: app name 35 chars, bot display name 80, description 140
@@ -70,6 +75,26 @@ export const agentAppDescription = (clampedName: string): string =>
   clamp(`${clampedName}, a OneCLI hosted agent`, DESCRIPTION_MAX);
 
 /**
+ * The About text WITH provenance: who in the org this app answers to. Slack
+ * shows the description on the app's profile card, so the owner's name and
+ * email give teammates a human to ask about the bot. Clamped inside Slack's
+ * 140-char budget with the owner part sacrificed first — the identity line
+ * must survive whole.
+ */
+export const agentAppDescriptionWithOwner = (
+  clampedName: string,
+  owner: { name: string | null; email: string } | null,
+): string => {
+  const base = agentAppDescription(clampedName);
+  if (!owner) return base;
+  const who = owner.name?.trim()
+    ? `${owner.name.trim()} (${owner.email})`
+    : owner.email;
+  const withOwner = `${base}. Managed by ${who}.`;
+  return withOwner.length <= DESCRIPTION_MAX ? withOwner : base;
+};
+
+/**
  * The live-rename edit: both name fields replaced AND the About description
  * refreshed — but only when the exported description is exactly the one we
  * generated for the OLD name. A description someone customized in Slack's
@@ -86,17 +111,31 @@ export const withSyncedAppName = (
     unknown
   >;
   const oldName = typeof oldInfo.name === "string" ? oldInfo.name : null;
-  if (oldName === null || oldInfo.description !== agentAppDescription(oldName))
+  if (oldName === null || typeof oldInfo.description !== "string") {
     return renamed;
+  }
+  // Ours comes in two generated shapes: the bare identity line, or the
+  // identity line plus a ". Managed by …" owner suffix. Either moves with
+  // the rename (the owner suffix carried over verbatim); anything else is a
+  // human's custom text and is preserved untouched.
+  const bare = agentAppDescription(oldName);
+  const isBare = oldInfo.description === bare;
+  const ownerSuffix =
+    !isBare && oldInfo.description.startsWith(`${bare}. Managed by `)
+      ? oldInfo.description.slice(bare.length)
+      : null;
+  if (!isBare && ownerSuffix === null) return renamed;
   const newInfo = (renamed.display_information ?? {}) as Record<
     string,
     unknown
   >;
+  const newBare = agentAppDescription(newInfo.name as string);
+  const withSuffix = ownerSuffix ? `${newBare}${ownerSuffix}` : newBare;
   return {
     ...renamed,
     display_information: {
       ...newInfo,
-      description: agentAppDescription(newInfo.name as string),
+      description: withSuffix.length <= DESCRIPTION_MAX ? withSuffix : newBare,
     },
   };
 };
@@ -146,18 +185,38 @@ export const BOT_SCOPES = [
   "users:read.email",
 ] as const;
 
+/**
+ * The scope list for one app flavor — the ONE place the manifest and a
+ * resumed attach's consent URL agree on what the app asks for. NEW apps are
+ * always agent-flavored (`assistant:write`: Slack requires it to declare
+ * `agent_view`); the `regular` arm exists for PRE-EXISTING apps only — a
+ * pending regular attach resumed after the agent-only switch must grant
+ * exactly the scopes its remote manifest declared.
+ */
+export const botScopesFor = (appMode: ChannelAppMode): string[] =>
+  appMode === "agent" ? [...BOT_SCOPES, "assistant:write"] : [...BOT_SCOPES];
+
+/** Slack caps `agent_description` at 300 chars — its own budget, distinct
+ * from the 140-char About description. */
+const AGENT_DESCRIPTION_MAX = 300;
+
 export interface AgentManifestInput {
   agentName: string;
   transport: ChannelTransport;
   /** The deployment's public API origin — required on the events arm, where
    * Slack must be able to call back; null on the socket arm. */
   publicApiUrl: string | null;
+  /** The attaching member — surfaces in the app's About description so
+   * teammates know whose agent this is. Optional: rebuild paths (tombstone,
+   * rename) don't know the owner and keep whatever description exists. */
+  owner?: { name: string | null; email: string } | null;
 }
 
 export const buildAgentManifest = ({
   agentName,
   transport,
   publicApiUrl,
+  owner,
 }: AgentManifestInput): Record<string, unknown> => {
   const name = clamp(agentName.trim() || "OneCLI agent", APP_NAME_MAX);
   const events = transport === "events";
@@ -172,7 +231,9 @@ export const buildAgentManifest = ({
   return {
     display_information: {
       name,
-      description: agentAppDescription(name),
+      description: owner
+        ? agentAppDescriptionWithOwner(name, owner)
+        : agentAppDescription(name),
     },
     features: {
       // Without an enabled, WRITABLE messages tab Slack disables the DM
@@ -183,13 +244,23 @@ export const buildAgentManifest = ({
         messages_tab_enabled: true,
         messages_tab_read_only_enabled: false,
       },
+      // Declares the app a Slack agent (required for `agents.sessions.*`).
+      // `agent_description` is required whenever the block is present. No
+      // `suggested_prompts` — the DM should feel like a person, not a
+      // product tour.
+      agent_view: {
+        agent_description: clamp(
+          agentAppDescription(name),
+          AGENT_DESCRIPTION_MAX,
+        ),
+      },
       bot_user: {
         display_name: name,
         always_online: true,
       },
     },
     oauth_config: {
-      scopes: { bot: [...BOT_SCOPES] },
+      scopes: { bot: botScopesFor("agent") },
       ...(events && { redirect_urls: [inbound("oauth/callback")] }),
     },
     settings: {
