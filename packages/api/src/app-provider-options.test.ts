@@ -23,12 +23,13 @@ import {
   type ResourceHooks,
   type ConnectionHooks,
 } from "./providers";
+import { createInProcessEventBus } from "./services/event-bus";
 
 describe("createApiApp provider options", () => {
   it("registers provided custom provider options into their provider slots", () => {
     const mockCrypto: CryptoService = {
-      encrypt: async () => ({ cipherText: "mock", iv: "mock", tag: "mock" }),
-      decrypt: async () => "mock",
+      encrypt: async (p) => p,
+      decrypt: async (c) => c,
     };
 
     const mockSshCa: SshCaSigner = {
@@ -36,21 +37,18 @@ describe("createApiApp provider options", () => {
       sign: async () => Buffer.from("mock_sig"),
     };
 
-    const mockEventBus: EventBus = {
-      publish: async () => {},
-      subscribe: () => () => {},
-    };
+    const mockEventBus: EventBus = createInProcessEventBus();
 
     const mockAttachmentStore: AttachmentBlobStore = {
-      put: async () => ({ blobKey: "k", sizeBytes: 1 }),
-      get: async () => null,
+      put: async () => ({ storageRef: "mock_ref" }),
+      get: async () => Buffer.from("mock_bytes"),
       delete: async () => {},
-      exists: async () => true,
     };
 
     const mockOAuthOrg: OAuthOrgHandlers = {
-      handleAuthorize: async () => new Response("ok"),
-      handleCallback: async () => new Response("ok"),
+      tryHandleOrgAuthorize: async () => new Response("ok"),
+      tryHandleOrgCallback: async () => new Response("ok"),
+      tryHandleOrgConnect: async () => new Response("ok"),
     };
 
     const mockAccessChecker: WorkspaceAccessChecker = {
@@ -58,22 +56,17 @@ describe("createApiApp provider options", () => {
       userIsOrgAdmin: async () => true,
     };
 
-    const mockSessionEnforcer: SessionEnforcer = {
-      enforceSession: async () => null,
-    };
+    const mockSessionEnforcer: SessionEnforcer = async () => null;
 
-    const mockSessionThrottle: SessionThrottle = {
-      checkThrottle: async () => null,
-    };
+    const mockSessionThrottle: SessionThrottle = async (_c, next) => next();
 
     const mockResourceHooks: ResourceHooks = {
-      onResourceCreate: async () => {},
-      onResourceDelete: async () => {},
+      beforeCreateAgent: async () => {},
+      beforeCreateSecret: async () => {},
     };
 
     const mockConnectionHooks: ConnectionHooks = {
-      onConnectionCreate: async () => {},
-      onConnectionDelete: async () => {},
+      beforeCreate: async () => {},
     };
 
     createApiApp(
