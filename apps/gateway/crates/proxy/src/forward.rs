@@ -2185,6 +2185,5 @@ mod tests {
             "the body genuinely outlived the 1s header bound (took {:?})",
             started.elapsed(),
         );
->>>>>>> upstream/main:apps/gateway/crates/proxy/src/forward.rs
     }
 }
