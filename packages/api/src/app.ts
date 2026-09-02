@@ -168,8 +168,10 @@ export const createApiApp = (
   if (options?.eventBus) initEventBus(options.eventBus);
   if (options?.attachmentStore) initAttachmentStore(options.attachmentStore);
   if (options?.oauthOrg) initOAuthOrg(options.oauthOrg);
-  if (options?.strictApiKeyAuth !== undefined) initStrictApiKeyAuth(options.strictApiKeyAuth);
-  if (options?.workspaceAccessChecker) initWorkspaceAccessChecker(options.workspaceAccessChecker);
+  if (options?.strictApiKeyAuth !== undefined)
+    initStrictApiKeyAuth(options.strictApiKeyAuth);
+  if (options?.workspaceAccessChecker)
+    initWorkspaceAccessChecker(options.workspaceAccessChecker);
   if (options?.sessionEnforcer) initSessionEnforcer(options.sessionEnforcer);
   if (options?.sessionThrottle) initSessionThrottle(options.sessionThrottle);
   if (options?.resourceHooks) initResourceHooks(options.resourceHooks);

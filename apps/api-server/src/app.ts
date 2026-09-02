@@ -1,6 +1,10 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createApiApp, type CreateApiAppOptions, type SessionProvider } from "@onecli/api";
+import {
+  createApiApp,
+  type CreateApiAppOptions,
+  type SessionProvider,
+} from "@onecli/api";
 import { createScimApp } from "@onecli/api/ee/scim";
 import { eeSessionHooks } from "@onecli/api/ee/auth/session-hooks";
 import { IS_CLOUD } from "@onecli/api/lib/env";
@@ -31,7 +35,9 @@ function loadDeploymentProviderOptions(): Partial<CreateApiAppOptions> & {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require(modulePath);
-    return (mod.default ?? mod.options ?? mod) as Partial<CreateApiAppOptions> & {
+    return (mod.default ??
+      mod.options ??
+      mod) as Partial<CreateApiAppOptions> & {
       sessionProvider?: SessionProvider;
     };
   } catch (err) {
@@ -41,7 +47,8 @@ function loadDeploymentProviderOptions(): Partial<CreateApiAppOptions> & {
 }
 
 const deploymentOptions = loadDeploymentProviderOptions();
-const { sessionProvider: customSessionProvider, ...extraOptions } = deploymentOptions;
+const { sessionProvider: customSessionProvider, ...extraOptions } =
+  deploymentOptions;
 
 // The api-server is the only API server in every edition. Every provider —
 // crypto, org OAuth, quotas, SSO enforcement, the EE routes — resolves from
@@ -50,7 +57,8 @@ const { sessionProvider: customSessionProvider, ...extraOptions } = deploymentOp
 // own public origin (OAuth callbacks must come back to the API host, not the
 // web app), and the cloud session hooks (they have no edition default).
 const apiApp = createApiApp(
-  customSessionProvider ?? (IS_CLOUD ? cognitoSessionProvider : onpremSessionProvider),
+  customSessionProvider ??
+    (IS_CLOUD ? cognitoSessionProvider : onpremSessionProvider),
   {
     selfUrl: apiOrigin(),
     sessionHooks: IS_CLOUD ? eeSessionHooks : onpremSessionHooks,
