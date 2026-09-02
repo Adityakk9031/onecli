@@ -218,9 +218,15 @@ fn upstream_offers_anonymous_token_challenge(headers: &hyper::HeaderMap) -> bool
 /// an API call. For unknown hosts, 401/403 responses on HTML pages (e.g. Cloudflare
 /// WAF blocks, anti-bot challenges, or web login pages) must be forwarded as-is rather
 /// than hijacked with `credential_not_found` JSON error nudges.
-fn is_html_or_browser_traffic(req_headers: &hyper::HeaderMap, resp_headers: &hyper::HeaderMap) -> bool {
+fn is_html_or_browser_traffic(
+    req_headers: &hyper::HeaderMap,
+    resp_headers: &hyper::HeaderMap,
+) -> bool {
     // 1. Upstream returned HTML content (e.g. Cloudflare challenge or 403 HTML page)
-    if let Some(ct) = resp_headers.get(hyper::header::CONTENT_TYPE).and_then(|v| v.to_str().ok()) {
+    if let Some(ct) = resp_headers
+        .get(hyper::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+    {
         let ct_lower = ct.to_ascii_lowercase();
         if ct_lower.contains("text/html") || ct_lower.contains("application/xhtml+xml") {
             return true;
@@ -228,7 +234,10 @@ fn is_html_or_browser_traffic(req_headers: &hyper::HeaderMap, resp_headers: &hyp
     }
 
     // 2. Client requested HTML (e.g. browser navigation or page text extraction)
-    if let Some(accept) = req_headers.get(hyper::header::ACCEPT).and_then(|v| v.to_str().ok()) {
+    if let Some(accept) = req_headers
+        .get(hyper::header::ACCEPT)
+        .and_then(|v| v.to_str().ok())
+    {
         let accept_lower = accept.to_ascii_lowercase();
         if accept_lower.contains("text/html") || accept_lower.contains("application/xhtml+xml") {
             return true;
